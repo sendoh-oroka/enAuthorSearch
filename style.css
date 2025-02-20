@@ -4,19 +4,6 @@
   box-sizing: border-box;
 }
 
-@media (max-width: 600px) {
-  .search-form {
-    max-width: 100%;
-    padding: 0 15px;
-  }
-
-  .container {
-    margin: 20px auto;
-    width: 95%;
-    padding: 2%;
-  }
-}
-
 body {
   font-family: sans-serif;
   background: #e9ecef;
@@ -27,14 +14,14 @@ body {
 .search-form {
   display: flex;
   justify-content: center;
-  max-width: 500px;
+  margin: 10px auto;
   width: 100%;
-  margin: auto;
+  margin: 15px auto 15px auto;
   font-size: 18px;
 }
 .search-form input[type="text"] {
   flex: 1;
-  padding: 12px;
+  padding: 10px;
   font-size: 18px;
   border: 2px solid #ddd;
   border-radius: 5px 0 0 5px;
@@ -45,7 +32,7 @@ body {
   border-color: #007bff;
 }
 .search-form button {
-  padding: 12px 24px;
+  padding: 10px 20px;
   font-size: 18px;
   border: 2px solid #007bff;
   border-left: none;
@@ -61,7 +48,7 @@ body {
 
 .container {
   max-width: 600px;
-  margin: 100px auto 0 auto;
+  margin: 100px auto 100px auto;
   padding: 3%;
   background: #fff;
   border-radius: 10px;
@@ -71,7 +58,7 @@ body {
 
 .page {
   background: #f6f7f8;
-  margin: 10px auto;
+  margin: 9.8px auto;
   padding: 10px;
   border-radius: 8px;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
@@ -119,7 +106,7 @@ body {
 #loading {
   display: none;
   position: absolute;
-  bottom: -100px;
+  bottom: -80px;
   left: 50%;
   transform: translate(-50%);
   z-index: 1000;
@@ -139,3 +126,23 @@ body {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
+
+@media(max-width: 600px) {
+  .container {
+    margin: 20px auto;
+    width: 90%;
+    padding: 2%;
+  }
+
+  .search-form {
+    width: 95%;
+    height: 95%;
+    font-size: 16px;
+  }
+
+  .page {
+    width: 95%;
+    font-size: 14px;
+  }
+}
+
