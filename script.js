@@ -65,7 +65,6 @@ const queries = {
   `
 };
 
-// グローバルステート（検索時の著者と検索境界となる日付）
 let currentAuthor = "";
 let currentBoundary = null;
 
@@ -203,8 +202,23 @@ function updateLoadButton(show) {
   }
 }
 
+// ローディングアニメーションを管理する関数
+function showLoading() {
+  const loadingElement = document.getElementById("loading");
+  if (loadingElement) {
+    loadingElement.style.display = "block";
+  }
+}
+function hideLoading() {
+  const loadingElement = document.getElementById("loading");
+  if (loadingElement) {
+    loadingElement.style.display = "none";
+  }
+}
+
 // 検索結果の取得とレンダリングを行う関数
 async function searchAndRender(author, boundary = null, append = false) {
+  showLoading();
   try {
     const response = await executeQuery(author, boundary);
     const pages = response.user.attributedPages.edges;
@@ -223,6 +237,8 @@ async function searchAndRender(author, boundary = null, append = false) {
     console.error("検索に失敗しました", error);
     document.getElementById("result").innerHTML =
       "<p>エラーが発生しました。再度お試しください。</p>";
+  } finally {
+    hideLoading();
   }
 }
 

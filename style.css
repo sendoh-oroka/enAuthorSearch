@@ -65,16 +65,18 @@ body {
   padding: 3%;
   background: #fff;
   border-radius: 10px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 3px 4.5px rgba(0, 0, 0, 0.1);
+  position: relative;
 }
 
 .page {
-  background: #fff;
-  margin: 20px auto;
-  padding: 15px;
+  background: #f6f7f8;
+  margin: 10px auto;
+  padding: 10px;
   border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
   border: none;
+  font-size: 16px;
 }
 .page p {
   margin-bottom: 8px;
@@ -90,7 +92,7 @@ body {
   text-decoration: underline;
 }
 .page .details {
-  font-size: 0.8em;
+  font-size: 0.7em;
   color: #666;
 }
 
@@ -112,4 +114,28 @@ body {
 #loadButton:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+#loading {
+  display: none;
+  position: absolute;
+  bottom: -100px;
+  left: 50%;
+  transform: translate(-50%);
+  z-index: 1000;
+}
+
+.spinner {
+  width: 50px;
+  height: 50px;
+  border: 6px solid #f3f3f3;
+  border-top: 6px solid #3498db;
+  border-radius: 50%;
+  animation: spin 1s cubic-bezier(0.42, 0, 0.58, 1) infinite;
+  will-change: transform;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
