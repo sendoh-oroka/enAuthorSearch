@@ -6,7 +6,7 @@ const queries = {
         attributedPages(
           sort: { key: CREATED_AT, order: DESC }, 
           filter: { wikidotInfo: { category: { eq: "_default" } } }, 
-          first: 100
+          first: 50
         ) {
           edges {
             node {
@@ -39,7 +39,7 @@ const queries = {
             category: { eq: "_default" },
             createdAt: { lt: $lastCreatedAt }
           } }, 
-          first: 100
+          first: 50
         ) {
           edges {
             node {
@@ -100,8 +100,8 @@ function formatDate(dateString) {
 }
 
 // 指定パターンにマッチする情報を抽出する共通関数
-function extractInfo(node, pattern, checkMainUrl = false) {
-  if (checkMainUrl && pattern.test(node.url)) {
+function extractInfo(node, pattern, checkMainURL = false) {
+  if (checkMainURL && pattern.test(node.url)) {
     return {
       url: node.url,
       title: node.wikidotInfo.title,
@@ -120,8 +120,8 @@ function extractInfo(node, pattern, checkMainUrl = false) {
         rating: match.wikidotInfo.rating,
         createdAt: formatDate(match.wikidotInfo.createdAt)
       };
-      // EN情報の場合、rawCreatedAtが必要
-      if (checkMainUrl) {
+      // ENの場合、rawCreatedAtが必要
+      if (checkMainURL) {
         info.rawCreatedAt = match.wikidotInfo.createdAt;
       }
       return info;
@@ -211,10 +211,9 @@ async function searchAndRender(author, boundary = null, append = false) {
     renderPages(pages, append);
 
     // レスポンス件数が上限の場合は更に検索可能とする
-    if (pages.length === 100) {
+    if (pages.length === 50) {
       const lastNode = pages[pages.length - 1].node;
-      const enInfo = getENinfo(lastNode);
-      currentBoundary = enInfo ? enInfo.rawCreatedAt : null;
+      currentBoundary = lastNode.wikidotInfo.createdAt ? lastNode.wikidotInfo.createdAt : null;
       updateLoadButton(true);
     } else {
       currentBoundary = null;
