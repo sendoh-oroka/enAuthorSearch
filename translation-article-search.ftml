@@ -2,7 +2,7 @@
 **タイトル:** 翻訳記事検索
 **著者:** SCP財団
 **作成年:** 2025
-**ライセンス:** MIT License
+**ライセンス:** CC BY-SA 3.0
 [[include :scp-jp:credit:end]]
 
 
@@ -190,6 +190,23 @@ SOFTWARE.
       from { transform: rotate(0deg); }
       to { transform: rotate(360deg); }
     }
+
+
+    .cromFooter {
+      padding-top: 40px;
+      padding-bottom: 10px;
+      font-size: 12px;
+      font-weight: bold;
+      float: right;
+    }
+    .cromFooter a {
+      color: #485fc7;
+      text-decoration: none;
+    }
+    .cromFooter a:hover {
+      color: #666;
+      text-decoration: none;
+    }
   </style>
 </head>
 <body>
@@ -206,10 +223,6 @@ SOFTWARE.
       <div class="spinner"></div>
     </div>
   </div>
-  </br>
-  </br>
-  </br>
-  </br>
 
   <script>
     // 検索クエリ
@@ -420,6 +433,10 @@ SOFTWARE.
       });
     });
   </script>
+
+  <footer class="cromFooter">
+    <a href="https://crom.avn.sh/" target="_blank" rel="noopener">Powerd by Crom</a>
+  </footer>
 </body>
 </html>
 [[/html]]
@@ -440,7 +457,7 @@ Wikidot IDを入力して検索ボタンを押すと、数秒後にその著者�
 ++* Change Log
 [[div class="code"]]
 Created by sendoh-oroka 2025
-MIT License: 
+MIT License: https://github.com/sendoh-oroka/translationArticleSearch/blob/main/LICENSE
 
 [1.0.0] - 2025-02-21
 - Initial-release
