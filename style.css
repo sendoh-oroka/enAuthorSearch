@@ -15,9 +15,10 @@ body {
   display: flex;
   justify-content: center;
   margin: 10px auto;
-  width: 100%;
+  width: 95%;
+  height: 95%;
   margin: 15px auto 15px auto;
-  font-size: 18px;
+  font-size: 16px;
 }
 .search-form input[type="text"] {
   flex: 1;
@@ -48,8 +49,9 @@ body {
 
 .container {
   max-width: 600px;
-  margin: 100px auto 100px auto;
-  padding: 3%;
+  margin: 50px auto;
+  padding: 2%;
+  width: 90%;
   background: #fff;
   border-radius: 10px;
   box-shadow: 0 3px 4.5px rgba(0, 0, 0, 0.1);
@@ -60,10 +62,11 @@ body {
   background: #f6f7f8;
   margin: 9.8px auto;
   padding: 10px;
+  width: 95%;
   border-radius: 8px;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
   border: none;
-  font-size: 16px;
+  font-size: 14px;
 }
 .page p {
   margin: 8px 0px;
@@ -87,10 +90,11 @@ body {
 .untransPage {
   background: #e6e6e6;
   margin: 9.8px auto;
+  width: 95%;
   padding: 5px 10px;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
   border: none;
-  font-size: 12px;
+  font-size: 14px;
 }
 .untransPage p {
   margin: 8px 0px;
@@ -110,26 +114,6 @@ body {
   float: right;
   font-family: monospace;
   font-size: 12px;
-}
-
-#loadButton {
-  display: block;
-  margin: 20px auto;
-  padding: 10px 20px;
-  font-size: 16px;
-  background-color: #007bff;
-  color: #fff;
-  border: none;
-  border-radius: 5px;
-  cursor: pointer;
-  transition: background-color 0.3s;
-}
-#loadButton:hover {
-  background-color: #0056b3;
-}
-#loadButton:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
 }
 
 #loading {
@@ -156,22 +140,18 @@ body {
   to { transform: rotate(360deg); }
 }
 
-@media(max-width: 600px) {
-  .container {
-    margin: 20px auto;
-    width: 90%;
-    padding: 2%;
-  }
-
-  .search-form {
-    width: 95%;
-    height: 95%;
-    font-size: 16px;
-  }
-
-  .page .untransPage {
-    width: 95%;
-    font-size: 14px;
-  }
+.cromFooter {
+  padding-top: 40px;
+  padding-bottom: 10px;
+  font-size: 12px;
+  font-weight: bold;
+  float: right;
 }
-
+.cromFooter a {
+  color: #485fc7;
+  text-decoration: none;
+}
+.cromFooter a:hover {
+  color: #666;
+  text-decoration: none;
+}

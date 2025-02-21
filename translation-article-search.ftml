@@ -147,26 +147,6 @@ SOFTWARE.
       font-size: 12px;
     }
 
-    #loadButton {
-      display: block;
-      margin: 20px auto;
-      padding: 10px 20px;
-      font-size: 16px;
-      background-color: #007bff;
-      color: #fff;
-      border: none;
-      border-radius: 5px;
-      cursor: pointer;
-      transition: background-color 0.3s;
-    }
-    #loadButton:hover {
-      background-color: #0056b3;
-    }
-    #loadButton:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-    }
-
     #loading {
       display: none;
       position: absolute;
@@ -190,7 +170,6 @@ SOFTWARE.
       from { transform: rotate(0deg); }
       to { transform: rotate(360deg); }
     }
-
 
     .cromFooter {
       padding-top: 40px;
