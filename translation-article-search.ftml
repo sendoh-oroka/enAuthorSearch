@@ -1,3 +1,11 @@
+[[include :scp-jp:credit:start |mode=no-rate]]
+**タイトル:** 翻訳記事検索
+**著者:** SCP財団
+**作成年:** 2025
+**ライセンス:** MIT License
+[[include :scp-jp:credit:end]]
+
+
 [[html]]
 <!--
 MIT License
@@ -414,5 +422,26 @@ SOFTWARE.
   </script>
 </body>
 </html>
-
 [[/html]]
+
+
++ 翻訳記事検索
+
+[[[*https://crom.avn.sh|Crom API]]]のデータからEN著者のJP翻訳記事を検索します。ごく稀にCrom APIのデータが誤っているため、既訳記事が未訳扱いされることがあります。
+
++ 使い方
+
+Wikidot IDを入力して検索ボタンを押すと、数秒後にその著者の記事一覧が出力されます。既訳記事は、翻訳記事のURL・原語版のURL・ENとJPの評価値・ENとJPの投稿日(翻訳記事投稿日)が出力されます。未訳記事は、原語版のURL・原語版の投稿日が出力されます。
+
++ その他
+
+複数回「エラーが発生しました」と出る場合は、検索したWikidot IDとともにこのページのディスカッションにお願いします。
+
+++* Change Log
+[[div class="code"]]
+Created by sendoh-oroka 2025
+MIT License: 
+
+[1.0.0] - 2025-02-21
+- Initial-release
+[[/div]]
