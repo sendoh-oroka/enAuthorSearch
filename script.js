@@ -1,72 +1,44 @@
 // 検索クエリ
-const queries = {
-  initial: `
-    query enWorksQuery($author: String!) {
-      user(name: $author) {
-        attributedPages(
-          sort: { key: CREATED_AT, order: DESC }, 
-          filter: { wikidotInfo: { category: { eq: "_default" } } }, 
-          first: 50
-        ) {
-          edges {
-            node {
+const query =`
+  query enWorksQuery($author: String!, $afterID: ID) {
+    user(name: $author) {
+      attributedPages(
+        sort: { 
+          key: CREATED_AT
+          order: DESC
+        }
+        filter: { wikidotInfo: { category: { eq: "_default" } } }, 
+        first: 50
+        after: $afterID
+      ) {
+        edges {
+          node {
+            url
+            wikidotInfo {
+              title
+              rating
+              createdAt
+            }
+            translations {
               url
               wikidotInfo {
                 title
                 rating
                 createdAt
               }
-              translations {
-                url
-                wikidotInfo {
-                  title
-                  rating
-                  createdAt
-                }
-              }
             }
           }
         }
-      }
-    }
-  `,
-  further: `
-    query enWorksQuery($author: String!, $lastCreatedAt: DateTime) {
-      user(name: $author) {
-        attributedPages(
-          sort: { key: CREATED_AT, order: DESC }, 
-          filter: { wikidotInfo: { 
-            category: { eq: "_default" },
-            createdAt: { lt: $lastCreatedAt }
-          } }, 
-          first: 50
-        ) {
-          edges {
-            node {
-              url
-              wikidotInfo {
-                title
-                rating
-                createdAt
-              }
-              translations {
-                url
-                wikidotInfo {
-                  title
-                  rating
-                  createdAt
-                }
-              }
-            }
-          }
+        pageInfo {
+          hasNextPage
+          endCursor
         }
       }
     }
-  `
-};
+  }
+`;
 
-let currentAuthor = "";
-let currentBoundary = null;
+let targetAuthor = "";
 let allPages = [];
 
 const buildCromApiUrl = (query, variables) => `https://api.crom.avn.sh/graphql?query=${encodeURIComponent(query)}&variables=${encodeURIComponent(JSON.stringify(variables))}`
@@ -74,10 +46,9 @@ const getENinfo = (node) => extractInfo(node, /^http:\/\/scp-wiki\..*/, true);
 const getJPinfo = (node) => extractInfo(node, /^http:\/\/scp-jp\..*/);
 
 // GraphQL API呼び出し用の関数
-async function executeQuery(author, lastCreatedAt) {
-  const isFurther = Boolean(lastCreatedAt)
-  const query = isFurther ? queries.further : queries.initial;
-  const variables = isFurther ? { author, lastCreatedAt } : { author };
+async function executeQuery(afterID) {
+  const author = targetAuthor;
+  const variables = { author, afterID }
   const requestUrl = buildCromApiUrl(query, variables);
 
   const response = await fetch(requestUrl, {
@@ -175,27 +146,6 @@ function renderPages(pages) {
   resultContainer.innerHTML = pagesHTML;
 }
 
-// 再検索ボタンの作成・削除を管理する関数
-function updateLoadButton(show) {
-  let btn = document.getElementById("loadButton");
-
-  if (show) {
-    if (!btn) {
-      btn = document.createElement("button");
-      btn.id = "loadButton";
-      btn.textContent = "更に検索する";
-      btn.addEventListener("click", async () => {
-        btn.disabled = true;
-        await searchAndRender(currentAuthor, currentBoundary, true);
-      });
-      document.querySelector(".container").appendChild(btn);
-    }
-    btn.disabled = false;
-  } else if (btn) {
-    btn.remove();
-  }
-}
-
 // ローディングアニメーションを管理する関数
 function showLoading(show) {
   const loadingElement = document.getElementById("loading");
@@ -203,31 +153,28 @@ function showLoading(show) {
 }
 
 // 検索結果の取得とレンダリングを行う関数
-async function searchAndRender(author, boundary = null, append = false) {
-  showLoading(true);
+async function searchArticle(afterID = null) {
   try {
-    const response = await executeQuery(author, boundary);
+    const response = await executeQuery(afterID);
     const pages = response.user.attributedPages.edges;
+    const hasNextPage = response.user.attributedPages.pageInfo.hasNextPage;
+    afterID = response.user.attributedPages.pageInfo.endCursor;
+    allPages = [...allPages, ...pages];
 
-    allPages = append ? [...allPages, ...pages] : pages;
-
-    renderPages(allPages);
-
-    // レスポンス件数が上限の場合は更に検索可能とする
-    if (pages.length === 50) {
-      const lastNode = pages[pages.length - 1].node;
-      currentBoundary = lastNode.wikidotInfo.createdAt || null;
-      updateLoadButton(true);
+    // レスポンス件数が上限の場合は更に検索可能する
+    if (hasNextPage) {
+      setTimeout(() => {
+        searchArticle(afterID);
+      }, 1000);
     } else {
-      currentBoundary = null;
-      updateLoadButton(false);
+      renderPages(allPages);
+      showLoading(false);
     }
   } catch (error) {
     console.error("検索に失敗しました", error);
     document.getElementById("result").innerHTML = "<p>エラーが発生しました。再度お試しください。</p>";
-  } finally {
     showLoading(false);
-  }
+  } 
 }
 
 // DOM読み込み後の初期設定
@@ -244,11 +191,11 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    currentAuthor = author;
-    currentBoundary = null;
     resultContainer.innerHTML = "";
-    updateLoadButton(false);
-    searchAndRender(currentAuthor);
+    targetAuthor = author;
+    allPages = [];
+    showLoading(true);
+    searchArticle();
   });
 
   // Enterキーでも検索をトリガー

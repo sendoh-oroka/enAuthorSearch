@@ -1,0 +1,418 @@
+[[html]]
+<!--
+MIT License
+
+Copyright (c) 2025 - sendoh-oroka
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+-->
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    body {
+      font-family: sans-serif;
+      color: #333;
+    }
+
+    .search-form {
+      display: flex;
+      justify-content: center;
+      margin: 10px auto;
+      width: 95%;
+      height: 95%;
+      margin: 15px auto 15px auto;
+      font-size: 16px;
+    }
+    .search-form input[type="text"] {
+      flex: 1;
+      padding: 10px;
+      font-size: 18px;
+      border: 2px solid #ddd;
+      border-radius: 5px 0 0 5px;
+      outline: none;
+      transition: border 0.3s ease;
+    }
+    .search-form input[type="text"]:focus {
+      border-color: #007bff;
+    }
+    .search-form button {
+      padding: 10px 20px;
+      font-size: 18px;
+      border: 2px solid #007bff;
+      border-left: none;
+      background-color: #007bff;
+      color: #fff;
+      border-radius: 0 5px 5px 0;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+    }
+    .search-form button:hover {
+      background-color: #0056b3;
+    }
+
+    .container {
+      max-width: 600px;
+      margin: 50px auto;
+      padding: 2%;
+      width: 90%;
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 3px 4.5px rgba(0, 0, 0, 0.1);
+      position: relative;
+    }
+
+    .page {
+      background: #f6f7f8;
+      margin: 9.8px auto;
+      padding: 10px;
+      width: 95%;
+      border-radius: 8px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+      border: none;
+      font-size: 14px;
+    }
+    .page p {
+      margin: 8px 0px;
+    }
+    .page a {
+      font-weight: bold;
+      color: #007BFF;
+      text-decoration: none;
+      transition: color 0.3s;
+    }
+    .page a:hover {
+      color: #0056b3;
+      text-decoration: underline;
+    }
+    .page .details {
+      font-size: 12px;
+      margin: 5px 0px;
+      color: #666;
+    }
+
+    .untransPage {
+      background: #e6e6e6;
+      margin: 9.8px auto;
+      width: 95%;
+      padding: 5px 10px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+      border: none;
+      font-size: 14px;
+    }
+    .untransPage p {
+      margin: 8px 0px;
+      color: #666;
+    }
+    .untransPage a {
+      font-weight: bold;
+      color: #71a4d9;
+      text-decoration: none;
+      transition: color 0.3s;
+    }
+    .untransPage a:hover {
+      text-decoration: underline;
+    }
+
+    .postDate {
+      float: right;
+      font-family: monospace;
+      font-size: 12px;
+    }
+
+    #loadButton {
+      display: block;
+      margin: 20px auto;
+      padding: 10px 20px;
+      font-size: 16px;
+      background-color: #007bff;
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: background-color 0.3s;
+    }
+    #loadButton:hover {
+      background-color: #0056b3;
+    }
+    #loadButton:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    #loading {
+      display: none;
+      position: absolute;
+      bottom: -80px;
+      left: 50%;
+      transform: translate(-50%);
+      z-index: 1000;
+    }
+
+    .spinner {
+      width: 50px;
+      height: 50px;
+      border: 6px solid #f3f3f3;
+      border-top: 6px solid #3498db;
+      border-radius: 50%;
+      animation: spin 1s cubic-bezier(0.42, 0, 0.58, 1) infinite;
+      will-change: transform;
+    }
+
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  
+  <div class="container">
+    <div class="search-form">
+      <input type="text" id="authorInput" placeholder="Wikidot IDを入力">
+      <button id="searchButton">検索</button>
+    </div>
+
+    <div id="result"></div>
+
+    <div id="loading">
+      <div class="spinner"></div>
+    </div>
+  </div>
+  </br>
+  </br>
+  </br>
+  </br>
+
+  <script>
+    // 検索クエリ
+    const query =`
+      query enWorksQuery($author: String!, $afterID: ID) {
+        user(name: $author) {
+          attributedPages(
+            sort: { 
+              key: CREATED_AT
+              order: DESC
+            }
+            filter: { wikidotInfo: { category: { eq: "_default" } } }, 
+            first: 50
+            after: $afterID
+          ) {
+            edges {
+              node {
+                url
+                wikidotInfo {
+                  title
+                  rating
+                  createdAt
+                }
+                translations {
+                  url
+                  wikidotInfo {
+                    title
+                    rating
+                    createdAt
+                  }
+                }
+              }
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+        }
+      }
+    `;
+
+    let targetAuthor = "";
+    let allPages = [];
+
+    const buildCromApiUrl = (query, variables) => `https://api.crom.avn.sh/graphql?query=${encodeURIComponent(query)}&variables=${encodeURIComponent(JSON.stringify(variables))}`
+    const getENinfo = (node) => extractInfo(node, /^http:\/\/scp-wiki\..*/, true);
+    const getJPinfo = (node) => extractInfo(node, /^http:\/\/scp-jp\..*/);
+
+    // GraphQL API呼び出し用の関数
+    async function executeQuery(afterID) {
+      const author = targetAuthor;
+      const variables = { author, afterID }
+      const requestUrl = buildCromApiUrl(query, variables);
+
+      const response = await fetch(requestUrl, {
+        method: "GET",
+        headers: { Accept: "application/json" }
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP Error: ${response.status}`);
+      }
+      const { data, errors } = await response.json();
+      if (errors && errors.length > 0) {
+        throw new Error("GraphQL errors: " + JSON.stringify(errors));
+      }
+
+      return data;
+    }
+
+    // 日付フォーマット用の関数
+    function formatDate(dateString) {
+      const date = new Date(dateString);
+      return `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`;
+    }
+
+    // 共通の情報抽出関数
+    function extractInfo(node, pattern, checkMainUrl = false) {
+      const selectInfo = (obj) => ({
+        url: obj.url,
+        title: obj.wikidotInfo.title,
+        rating: obj.wikidotInfo.rating,
+        createdAt: new Date(obj.wikidotInfo.createdAt)
+      });
+
+      if (checkMainUrl && pattern.test(node.url)) {
+        return selectInfo(node);
+      }
+
+      if (Array.isArray(node.translations)) {
+        const match = node.translations.find((t) => pattern.test(t.url));
+        if (match) return selectInfo(match);
+      }
+      return null;
+    }
+
+    // HTMLを生成する関数
+    function buildPageHhml(node) {
+      const enInfo = getENinfo(node);
+      const jpInfo = getJPinfo(node);
+
+      if(!enInfo) return "";
+
+      if(!jpInfo) {
+        return `
+          <div class="untransPage">
+            <p><strong>未訳:</strong> <a href="${enInfo.url}" target="_blank">${enInfo.title}</a><span class="postDate"> ${formatDate(enInfo.createdAt)}投稿</span></p>
+          </div>
+        `;
+      }
+
+      return `
+        <div class="page">
+          <p><a href="${jpInfo.url}" target="_blank">${jpInfo.title}</a></p>
+          <p class="details">
+            <strong>原語版:</strong> 
+            <a href="${enInfo.url}" target="_blank">${enInfo.title}</a><span class="postDate"> ${formatDate(jpInfo.createdAt)}翻訳 ${formatDate(enInfo.createdAt)}投稿</span>
+          </p>
+          <p class="details">
+            <strong>EN:</strong> ${enInfo.rating} / <strong>JP:</strong> ${jpInfo.rating}
+          </p>
+        </div>
+      `;
+    }
+
+    // レスポンスからページ情報をレンタリングする関数
+    function renderPages(pages) {
+      const resultContainer = document.getElementById("result");
+      
+      // 初回検索時に検索結果が0件の場合
+      if (!pages.length) {
+        resultContainer.innerHTML = "<p>Wikidot IDが間違っています。</p>";
+        return;
+      }
+
+      // 日付ソート
+      const sortedPages = pages.slice().sort((a, b) => {
+        const enInfoA = getENinfo(a.node);
+        const enInfoB = getENinfo(b.node);
+        if(!enInfoA && !enInfoB) return 0;
+        if(!enInfoA) return 1;
+        if(!enInfoB) return -1;
+        return enInfoB.createdAt - enInfoA.createdAt;
+      });
+      
+      const pagesHTML = sortedPages.map(({ node }) => buildPageHhml(node)).join("");
+      resultContainer.innerHTML = pagesHTML;
+    }
+
+    // ローディングアニメーションを管理する関数
+    function showLoading(show) {
+      const loadingElement = document.getElementById("loading");
+      loadingElement.style.display = show ? "block" : "none";
+    }
+
+    // 検索結果の取得とレンダリングを行う関数
+    async function searchArticle(afterID = null) {
+      try {
+        const response = await executeQuery(afterID);
+        const pages = response.user.attributedPages.edges;
+        const hasNextPage = response.user.attributedPages.pageInfo.hasNextPage;
+        afterID = response.user.attributedPages.pageInfo.endCursor;
+        allPages = [...allPages, ...pages];
+
+        // レスポンス件数が上限の場合は更に検索可能する
+        if (hasNextPage) {
+          setTimeout(() => {
+            searchArticle(afterID);
+          }, 1000);
+        } else {
+          renderPages(allPages);
+          showLoading(false);
+        }
+      } catch (error) {
+        console.error("検索に失敗しました", error);
+        document.getElementById("result").innerHTML = "<p>エラーが発生しました。再度お試しください。</p>";
+        showLoading(false);
+      } 
+    }
+
+    // DOM読み込み後の初期設定
+    document.addEventListener("DOMContentLoaded", () => {
+      const authorInput = document.getElementById("authorInput");
+      const searchButton = document.getElementById("searchButton");
+      const resultContainer = document.getElementById("result");
+
+      // 初回検索時のイベント設定
+      searchButton.addEventListener("click", () => {
+        const author = authorInput.value.trim();
+        if (!author) {
+          alert("Wikidot IDを入力してください");
+          return;
+        }
+
+        resultContainer.innerHTML = "";
+        targetAuthor = author;
+        allPages = [];
+        showLoading(true);
+        searchArticle();
+      });
+
+      // Enterキーでも検索をトリガー
+      authorInput.addEventListener("keypress", (event) => {
+        if (event.key === "Enter") {
+          searchButton.click();
+        }
+      });
+    });
+  </script>
+</body>
+</html>
+
+[[/html]]
