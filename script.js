@@ -67,7 +67,11 @@ const queries = {
 
 let currentAuthor = "";
 let currentBoundary = null;
+let allPages = [];
+
 const buildCromApiUrl = (query, variables) => `https://api.crom.avn.sh/graphql?query=${encodeURIComponent(query)}&variables=${encodeURIComponent(JSON.stringify(variables))}`
+const getENinfo = (node) => extractInfo(node, /^http:\/\/scp-wiki\..*/, true);
+const getJPinfo = (node) => extractInfo(node, /^http:\/\/scp-jp\..*/);
 
 // GraphQL API呼び出し用の関数
 async function executeQuery(author, lastCreatedAt) {
@@ -104,7 +108,7 @@ function extractInfo(node, pattern, checkMainUrl = false) {
     url: obj.url,
     title: obj.wikidotInfo.title,
     rating: obj.wikidotInfo.rating,
-    createdAt: obj.wikidotInfo.createdAt
+    createdAt: new Date(obj.wikidotInfo.createdAt)
   });
 
   if (checkMainUrl && pattern.test(node.url)) {
@@ -117,9 +121,6 @@ function extractInfo(node, pattern, checkMainUrl = false) {
   }
   return null;
 }
-
-const getENinfo = (node) => extractInfo(node, /^http:\/\/scp-wiki\..*/, true);
-const getJPinfo = (node) => extractInfo(node, /^http:\/\/scp-jp\..*/);
 
 // HTMLを生成する関数
 function buildPageHhml(node) {
@@ -151,18 +152,27 @@ function buildPageHhml(node) {
 }
 
 // レスポンスからページ情報をレンタリングする関数
-function renderPages(pages, append = false) {
+function renderPages(pages) {
   const resultContainer = document.getElementById("result");
   
   // 初回検索時に検索結果が0件の場合
-  if (!pages.length && !append) {
-    resultContainer.innerHTML = "<p>Wikidot IDが間違っています</p>";
+  if (!pages.length) {
+    resultContainer.innerHTML = "<p>Wikidot IDが間違っています。</p>";
     return;
   }
 
+  // 日付ソート
+  const sortedPages = pages.slice().sort((a, b) => {
+    const enInfoA = getENinfo(a.node);
+    const enInfoB = getENinfo(b.node);
+    if(!enInfoA && !enInfoB) return 0;
+    if(!enInfoA) return 1;
+    if(!enInfoB) return -1;
+    return enInfoB.createdAt - enInfoA.createdAt;
+  });
   
-  const pagesHTML = pages.map(({ node }) => buildPageHhml(node)).join("");
-  resultContainer.innerHTML = append ? resultContainer.innerHTML + pagesHTML : pagesHTML;
+  const pagesHTML = sortedPages.map(({ node }) => buildPageHhml(node)).join("");
+  resultContainer.innerHTML = pagesHTML;
 }
 
 // 再検索ボタンの作成・削除を管理する関数
@@ -198,7 +208,10 @@ async function searchAndRender(author, boundary = null, append = false) {
   try {
     const response = await executeQuery(author, boundary);
     const pages = response.user.attributedPages.edges;
-    renderPages(pages, append);
+
+    allPages = append ? [...allPages, ...pages] : pages;
+
+    renderPages(allPages);
 
     // レスポンス件数が上限の場合は更に検索可能とする
     if (pages.length === 50) {
