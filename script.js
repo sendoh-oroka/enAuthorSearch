@@ -86,15 +86,18 @@ const wikiRegexes = [
   { pattern: /^http:\/\/scpfoundation\./, branch: "RU"},
   { pattern: /^http:\/\/scp-zh-tr\./, branch: "ZH"},
   { pattern: /^http:\/\/scp-pt-br\./, branch: "PT"},
+  { pattern: /^http:\/\/scp-wiki-de\./, branch: "DE"},
+  { pattern: /^http:\/\/scp-int\./, branch: "INT"},
   { pattern: /^http:\/\/fondationscp\./, branch: "FR"},
   { pattern: /^http:\/\/fondazionescp\./, branch: "IT"},
   { pattern: /^http:\/\/scp-th\./, branch: "TH"},
   { pattern: /^http:\/\/scp-cs\./, branch: "CS"},
-  { pattern: /^http:\/\/scp-wiki-de\./, branch: "DE"},
   { pattern: /^http:\/\/scp-vn\./, branch: "VN"},
   { pattern: /^http:\/\/scp-ukrainian\./, branch: "UR"},
   { pattern: /^http:\/\/scp-idn\./, branch: "ID"},
-  { pattern: /^http:\/\/scp-int\./, branch: "INT"},
+  { pattern: /^http:\/\/scp-el\./, branch: "EL"},
+  { pattern: /^http:\/\/scp-nd\./, branch: "ND"},
+  { pattern: /^http:\/\/scpvakfi\./, branch: "TR"},
 ];
 
 const buildCromApiUrl = (query, variables) =>
@@ -125,19 +128,15 @@ function parseInfo(node, checkJP = false) {
   const articles = [];
 
   const addArticle = obj => {
-    const names = obj.attributions.map(attr =>
-      attr.user.name.toLowerCase()
-    );
-    if (obj?.wikidotInfo) {
-      articles.push({
-        url: obj.url,
-        title: obj.wikidotInfo.title,
-        rating: obj.wikidotInfo.rating,
-        createdAt: new Date(obj.wikidotInfo.createdAt),
-        name: names,
-        branch: null
-      });
-    }
+    if (!obj?.wikidotInfo) return;
+    articles.push({
+      url: obj.url,
+      title: obj.wikidotInfo.title,
+      rating: obj.wikidotInfo.rating,
+      createdAt: new Date(obj.wikidotInfo.createdAt),
+      name: obj.attributions.map(attr => attr.user.name.toLowerCase()),
+      branch: null
+    });
   };
 
   addArticle(node);
@@ -167,20 +166,21 @@ function parseInfo(node, checkJP = false) {
     }
   }
 
-  const oriArticle = articles.reduce((earliest, article) => 
+  let oriArticle = articles.reduce((earliest, article) => 
     article.createdAt < earliest.createdAt ? article : earliest, articles[0]
   );
 
-  const author = targetAuthor.toLowerCase();
-  if (!oriArticle.name.includes(author)) {
-    return null;
+  if (/\.wikidot\.com\/scp-\d{3,4}$/.test(oriArticle.url)) {
+    oriArticle = articles.find(article => article.url.indexOf("http://scp-wiki.") === 0);
+  } else {
+    const author = targetAuthor;
+    if (!oriArticle.name.includes(author)) return null;
   }
 
-  for (const {pattern, branch} of wikiRegexes) {
-    if (pattern.test(oriArticle.url)) {
-      oriArticle.branch = branch;
-      return oriArticle.branch === "JP" ? null : oriArticle;
-    }
+  const match = wikiRegexes.find(({ pattern, branch }) => pattern.test(oriArticle.url));
+  if (match) {
+    oriArticle.branch = match.branch;
+    return match.branch === "JP" ? null : oriArticle;
   }
 
   return null;
@@ -196,10 +196,15 @@ function buildPageHtml(node) {
   const oriInfo = getOriInfo(node);
   const jpInfo = getJPinfo(node);
 
+  if (!oriInfo) return '';
+
   if(!jpInfo) {
     return `
       <div class="untransPage">
-        <p><strong>${oriInfo.branch}:</strong> <a href="${oriInfo.url}" target="_blank">${oriInfo.title}</a><span class="postDate"> ${formatDate(oriInfo.createdAt)}投稿</span></p>
+        <p>
+          <strong>${oriInfo.branch}:</strong> <a href="${oriInfo.url}" target="_blank">${oriInfo.title}</a>
+          <span class="postDate"> ${formatDate(oriInfo.createdAt)}投稿</span>
+        </p>
       </div>
     `;
   }
@@ -209,7 +214,8 @@ function buildPageHtml(node) {
       <p><a href="${jpInfo.url}" target="_blank">${jpInfo.title}</a></p>
       <p class="details">
         <strong>原語版:</strong>
-        <a href="${oriInfo.url}" target="_blank">${oriInfo.title}</a><span class="postDate"> ${formatDate(jpInfo.createdAt)}翻訳 ${formatDate(oriInfo.createdAt)}投稿</span>
+        <a href="${oriInfo.url}" target="_blank">${oriInfo.title}</a>
+        <span class="postDate"> ${formatDate(jpInfo.createdAt)}翻訳 ${formatDate(oriInfo.createdAt)}投稿</span>
       </p>
       <p class="details">
         <strong>${oriInfo.branch}:</strong> ${oriInfo.rating} / <strong>${jpInfo.branch}:</strong> ${jpInfo.rating}
@@ -286,7 +292,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     resultContainer.innerHTML = "";
-    targetAuthor = author;
+    targetAuthor = author.toLowerCase();
     searchArticle(author);
   });
 
