@@ -1,4 +1,5 @@
-const CROM_QUERY =`
+// GraphQLクエリ（必要に応じて内容を補完してください）
+const GRAPHQL_QUERY = `
   query enWorksQuery($author: String!, $afterID: ID) {
     user(name: $author) {
       attributedPages(
@@ -73,8 +74,7 @@ const CROM_QUERY =`
   }
 `;
 
-let targetAuthor = "";
-
+// URLパターンと対応するブランチの定義
 const WIKI_REGEXES = [
   { pattern: /^http:\/\/scp-wiki\./, branch: "EN"},
   { pattern: /^http:\/\/wanderers-library\./, branch: "WL"},
@@ -100,44 +100,53 @@ const WIKI_REGEXES = [
   { pattern: /^http:\/\/scpvakfi\./, branch: "TR"},
 ];
 
-const buildCromApiUrl = (variables) =>
-  `https://api.crom.avn.sh/graphql?query=${encodeURIComponent(CROM_QUERY)}&variables=${encodeURIComponent(JSON.stringify(variables))}`;
+// クエリと変数を元にCrom APIのURLを構築する
+const buildCromApiUrl = (query, variables) => {
+  const encodedQuery = encodeURIComponent(query);
+  const encodedVariables = encodeURIComponent(JSON.stringify(variables));
+  return `https://api.example.com/graphql?query=${encodedQuery}&variables=${encodedVariables}`;
+};
 
-async function executeQuery(author, afterID) {
-  const variables = { author, afterID }
-  const requestUrl = buildCromApiUrl(variables);
+// GraphQL APIを非同期に実行し、エラー処理も含める
+const executeQuery = async (author, afterID) => {
+  const variables = { author, afterID };
+  const url = buildCromApiUrl(GRAPHQL_QUERY, variables);
 
-  const response = await fetch(requestUrl, {
+  const response = await fetch(url, {
     method: "GET",
-    headers: { Accept: "application/json" }
+    headers: { Accept: "application/json" },
   });
 
   if (!response.ok) {
     throw new Error(`HTTP Error: ${response.status}`);
   }
+
   const { data, errors } = await response.json();
   if (errors && errors.length > 0) {
     throw new Error("GraphQL errors: " + JSON.stringify(errors));
   }
 
   return data;
-}
+};
 
-// nodeから各種情報を抽出
+// ノードから記事情報を再帰的に抽出する
 const collectArticles = (node) => {
-  if (!node) return null;
+  if (!node) return [];
+
   const articles = [];
 
-  const addArticle = obj => {
-    if (!obj?.wikidotInfo) return;
-    articles.push({
-      url: obj.url,
-      title: obj.wikidotInfo.title,
-      rating: obj.wikidotInfo.rating,
-      createdAt: new Date(obj.wikidotInfo.createdAt),
-      name: obj.attributions.map(attr => attr.user.name.toLowerCase()),
-      branch: null
-    });
+  const addArticle = (item) => {
+    if (item && item.wikidotInfo) {
+      articles.push({
+        url: item.url,
+        title: item.wikidotInfo.title,
+        rating: item.wikidotInfo.rating,
+        createdAt: new Date(item.wikidotInfo.createdAt),
+        // attributonsのユーザー名をすべて小文字に変換して配列に保持
+        names: item.attributions.map(attr => attr.user.name.toLowerCase()),
+        branch: null,
+      });
+    }
   };
 
   addArticle(node);
@@ -155,69 +164,85 @@ const collectArticles = (node) => {
   return articles;
 };
 
-// nodeから原語版もしくはJP版の情報を返す
-function parseInfo(node, checkJP = false) {
+// ノードから記事情報を解析し、オリジナル版または日本語版の記事情報を返す
+// targetAuthor は小文字に変換済みのWikidot ID
+// checkJP が true の場合は日本語版を、false の場合はオリジナル版を抽出します
+const parseArticleInfo = (node, targetAuthor = '', checkJP = false) => {
   const articles = collectArticles(node);
   if (!articles.length) return null;
 
   if (checkJP) {
-    const jpArticle = articles.find(article => article.url.indexOf("http://scp-jp.") === 0);
-    const wljpArticle = articles.find(article => article.url.indexOf("http://wanderers-library-jp.") === 0);
+    // URLに基づいて日本語版の記事を探す
+    const jpArticle = articles.find(article => /http:\/\/scp-jp\./.test(article.url));
+    const wlJpArticle = articles.find(article => /http:\/\/wanderers-library\./.test(article.url));
     if (jpArticle) {
       jpArticle.branch = "JP";
       return jpArticle;
-    } else if (wljpArticle) {
-      wljpArticle.branch = "WL-JP";
-      return wljpArticle;
+    } else if (wlJpArticle) {
+      wlJpArticle.branch = "WL-JP";
+      return wlJpArticle;
     }
+    return null;
   } else {
-    let oriArticle = articles.reduce((earliest, article) => 
-      article.createdAt < earliest.createdAt ? article : earliest, articles[0]
-    );
+    // 対象の著者が含まれている記事に絞る
+    const candidates = articles.filter(article => article.names.includes(targetAuthor));
+    if (!candidates.length) return null;
 
-    if (/\.wikidot\.com\/scp-\d{3,4}$/.test(oriArticle.url)) {
-      oriArticle = articles.find(article => article.url.indexOf("http://scp-wiki.") === 0);
-    } else {
-      const author = targetAuthor;
-      if (!oriArticle.name.includes(author)) return null;
-    }
+    // 投稿日が最も早い記事を選択
+    let oriArticle = candidates.reduce((earliest, article) =>
+      article.createdAt < earliest.createdAt ? article : earliest
+    );
     
-    const matched = WIKI_REGEXES.find(({ pattern, branch }) => pattern.test(oriArticle.url));
+    // URLパターンにより記事ブランチを設定する
+    const matched = WIKI_REGEXES.find(({ pattern }) => pattern.test(oriArticle.url));
     if (matched) {
       oriArticle.branch = matched.branch;
+      // オリジナル検索時に日本語ブランチの記事は除外する
       return matched.branch === "JP" ? null : oriArticle;
     }
+
+    return null;
   }
+};
 
-  return null;
-}
+// オリジナル版と日本語版の情報を取得するためのラッパー
+const getOriginalInfo = (node, targetAuthor) => parseArticleInfo(node, targetAuthor, false);
+const getJPInfo = (node) => parseArticleInfo(node, '', true);
 
-const getOriInfo = (node) => parseInfo(node);
-const getJPinfo = (node) => parseInfo(node, true);
+// 日付を "YYYY/MM/DD" の形式にフォーマットする
+const formatDate = date => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}/${month}/${day}`;
+};
 
-const formatDate = (date) =>
-  `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`;
-
-function buildPageHtml(node) {
-  const oriInfo = getOriInfo(node);
-  const jpInfo = getJPinfo(node);
+// ページノードからHTML文字列を生成する
+const buildPageHtml = (node, targetAuthor) => {
+  const oriInfo = getOriginalInfo(node, targetAuthor);
+  const jpInfo = getJPInfo(node);
 
   if (!oriInfo) return "";
 
-  if(!jpInfo) {
+  // 翻訳されていない場合
+  if (!jpInfo) {
     return `
       <div class="untransPage">
         <p>
-          <strong>${oriInfo.branch}:</strong> <a href="${oriInfo.url}" target="_blank">${oriInfo.title}</a>
+          <strong>${oriInfo.branch}:</strong>
+          <a href="${oriInfo.url}" target="_blank">${oriInfo.title}</a>
           <span class="postDate"> ${formatDate(oriInfo.createdAt)}投稿</span>
         </p>
       </div>
     `;
   }
 
+  // 翻訳されている場合
   return `
     <div class="page">
-      <p><a href="${jpInfo.url}" target="_blank">${jpInfo.title}</a></p>
+      <p>
+        <a href="${jpInfo.url}" target="_blank">${jpInfo.title}</a>
+      </p>
       <p class="details">
         <strong>原語版:</strong>
         <a href="${oriInfo.url}" target="_blank">${oriInfo.title}</a>
@@ -228,9 +253,10 @@ function buildPageHtml(node) {
       </p>
     </div>
   `;
-}
+};
 
-function renderPages(pages) {
+// 取得したページリストを整形・整列してレンダリングする
+const renderPages = (pages, targetAuthor) => {
   const resultContainer = document.getElementById("result");
 
   if (!pages.length) {
@@ -241,27 +267,29 @@ function renderPages(pages) {
   const processedUrls = new Set();
   const sortedPages = pages
     .map(page => {
-      const oriInfo = getOriInfo(page.node);
-      return { ...page, oriInfo};
+      const oriInfo = getOriginalInfo(page.node, targetAuthor);
+      return { ...page, oriInfo };
     })
     .filter(({ oriInfo }) => {
       if (!oriInfo || processedUrls.has(oriInfo.url)) return false;
       processedUrls.add(oriInfo.url);
       return true;
     })
-    .sort((a, b) => {
-      return b.oriInfo.createdAt - a.oriInfo.createdAt;
-    });
+    .sort((a, b) => b.oriInfo.createdAt - a.oriInfo.createdAt);
 
-  const pagesHTML = sortedPages.map(({ node }) => buildPageHtml(node)).join("");
+  const pagesHTML = sortedPages.map(({ node }) => buildPageHtml(node, targetAuthor)).join("");
   resultContainer.innerHTML = pagesHTML;
-}
+};
 
-async function searchArticle(author) {
+// 著者IDを元に記事検索を行い、ページネーションにも対応する
+const searchArticle = async (author) => {
   let afterID = null;
   const allPages = [];
   const loadingElement = document.getElementById("loading");
   loadingElement.style.display = "block";
+
+  // 入力された著者IDは小文字に正規化
+  const normalizedAuthor = author.toLowerCase();
 
   try {
     do {
@@ -271,39 +299,42 @@ async function searchArticle(author) {
 
       allPages.push(...pages);
       afterID = hasNextPage ? response.user.attributedPages.pageInfo.endCursor : null;
+
+      // リクエスト間隔を空けて連続リクエストを防ぐ
       if (afterID) await new Promise(resolve => setTimeout(resolve, 500));
-    } while(afterID);
-    renderPages(allPages);
+    } while (afterID);
+
+    renderPages(allPages, normalizedAuthor);
   } catch (error) {
     console.error("検索に失敗しました", error);
-    document.getElementById("result").innerHTML = "<p>エラーが発生しました。再度お試しください。</p>";
+    document.getElementById("result").innerHTML =
+      "<p>エラーが発生しました。再度お試しください。</p>";
   } finally {
     loadingElement.style.display = "none";
   }
-}
+};
 
-// DOM読み込み後の初期設定
+// DOMコンテンツの読み込み完了後にイベントリスナーを設定する
 document.addEventListener("DOMContentLoaded", () => {
   const authorInput = document.getElementById("authorInput");
   const searchButton = document.getElementById("searchButton");
   const resultContainer = document.getElementById("result");
 
-  // 初回検索時のイベント設定
-  searchButton.addEventListener("click", () => {
+  const initiateSearch = () => {
     const author = authorInput.value.trim();
     if (!author) {
       alert("Wikidot IDを入力してください");
       return;
     }
-
     resultContainer.innerHTML = "";
-    targetAuthor = author.toLowerCase();
     searchArticle(author);
-  });
+  };
+
+  searchButton.addEventListener("click", initiateSearch);
 
   authorInput.addEventListener("keypress", (event) => {
     if (event.key === "Enter") {
-      searchButton.click();
+      initiateSearch();
     }
   });
 });
