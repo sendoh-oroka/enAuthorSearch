@@ -41,11 +41,10 @@ const query =`
 let targetAuthor = "";
 let allPages = [];
 
-const buildCromApiUrl = (query, variables) => `https://api.crom.avn.sh/graphql?query=${encodeURIComponent(query)}&variables=${encodeURIComponent(JSON.stringify(variables))}`
-const getENinfo = (node) => extractInfo(node, /^http:\/\/scp-wiki\..*/, true);
-const getJPinfo = (node) => extractInfo(node, /^http:\/\/scp-jp\..*/);
-
 // GraphQL API呼び出し用の関数
+const buildCromApiUrl = (query, variables) =>
+  `https://api.crom.avn.sh/graphql?query=${encodeURIComponent(query)}&variables=${encodeURIComponent(JSON.stringify(variables))}`;
+
 async function executeQuery(afterID) {
   const author = targetAuthor;
   const variables = { author, afterID }
@@ -65,12 +64,6 @@ async function executeQuery(afterID) {
   }
 
   return data;
-}
-
-// 日付フォーマット用の関数
-function formatDate(dateString) {
-  const date = new Date(dateString);
-  return `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`;
 }
 
 // 共通の情報抽出関数
@@ -93,17 +86,21 @@ function extractInfo(node, pattern, checkMainUrl = false) {
   return null;
 }
 
+const getENinfo = (node) => extractInfo(node, /^http:\/\/scp-wiki\..*/, true);
+const getJPinfo = (node) => extractInfo(node, /^http:\/\/scp-jp\..*/);
+
 // HTMLを生成する関数
+const formatDate = (date) =>
+  `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`;
+
 function buildPageHhml(node) {
   const enInfo = getENinfo(node);
   const jpInfo = getJPinfo(node);
 
-  if(!enInfo) return "";
-
   if(!jpInfo) {
     return `
       <div class="untransPage">
-        <p><strong>未訳:</strong> <a href="${enInfo.url}" target="_blank">${enInfo.title}</a><span class="postDate"> ${formatDate(enInfo.createdAt)}投稿</span></p>
+        <p><strong></strong><a href="${enInfo.url}" target="_blank">${enInfo.title}</a><span class="postDate"> ${formatDate(enInfo.createdAt)}投稿</span></p>
       </div>
     `;
   }
@@ -132,15 +129,21 @@ function renderPages(pages) {
     return;
   }
 
-  // 日付ソート
-  const sortedPages = pages.slice().sort((a, b) => {
-    const enInfoA = getENinfo(a.node);
-    const enInfoB = getENinfo(b.node);
-    if(!enInfoA && !enInfoB) return 0;
-    if(!enInfoA) return 1;
-    if(!enInfoB) return -1;
-    return enInfoB.createdAt - enInfoA.createdAt;
-  });
+  // 日付ソート・重複削除
+  const processedUrls = new Set();
+  const sortedPages = pages
+    .map(page => {
+      const enInfo = getENinfo(page.node);
+      return { ...page, enInfo};
+    })
+    .filter(({ enInfo }) => {
+      if (!enInfo || processedUrls.has(enInfo.url)) return false;
+      processedUrls.add(enInfo.url);
+      return true;
+    })
+    .sort((a, b) => {
+      return b.enInfo.createdAt - a.enInfo.createdAt;
+    });
   
   const pagesHTML = sortedPages.map(({ node }) => buildPageHhml(node)).join("");
   resultContainer.innerHTML = pagesHTML;
@@ -161,11 +164,11 @@ async function searchArticle(afterID = null) {
     afterID = response.user.attributedPages.pageInfo.endCursor;
     allPages = [...allPages, ...pages];
 
-    // レスポンス件数が上限の場合は更に検索可能する
+    // まだ記事がある場合は更に検索する
     if (hasNextPage) {
       setTimeout(() => {
         searchArticle(afterID);
-      }, 1000);
+      }, 500);
     } else {
       renderPages(allPages);
       showLoading(false);
@@ -198,7 +201,6 @@ document.addEventListener("DOMContentLoaded", () => {
     searchArticle();
   });
 
-  // Enterキーでも検索をトリガー
   authorInput.addEventListener("keypress", (event) => {
     if (event.key === "Enter") {
       searchButton.click();
