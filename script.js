@@ -1,4 +1,3 @@
-// 検索クエリ
 const query =`
   query enWorksQuery($author: String!, $afterID: ID) {
     user(name: $author) {
@@ -14,6 +13,11 @@ const query =`
         edges {
           node {
             url
+            attributions {
+              user {
+                name
+              }
+            }
             wikidotInfo {
               title
               rating
@@ -21,6 +25,11 @@ const query =`
             }
             translations {
               url
+              attributions {
+                user {
+                  name
+                }
+              }
               wikidotInfo {
                 title
                 rating
@@ -29,6 +38,11 @@ const query =`
             }
             translationOf {
               url
+              attributions {
+                user {
+                  name
+                }
+              }
               wikidotInfo {
                 title
                 rating
@@ -36,6 +50,11 @@ const query =`
               }
               translations {
                 url
+                attributions {
+                  user {
+                    name
+                  }
+                }
                 wikidotInfo {
                   title
                   rating
@@ -54,7 +73,8 @@ const query =`
   }
 `;
 
-// WikiURL辞書
+let targetAuthor = "";
+
 const wikiRegexes = [
   { pattern: /^http:\/\/scp-wiki\./, branch: "EN"},
   { pattern: /^http:\/\/wanderers-library\./, branch: "WL"},
@@ -77,7 +97,6 @@ const wikiRegexes = [
   { pattern: /^http:\/\/scp-int\./, branch: "INT"},
 ];
 
-// GraphQL API呼び出し用の関数
 const buildCromApiUrl = (query, variables) =>
   `https://api.crom.avn.sh/graphql?query=${encodeURIComponent(query)}&variables=${encodeURIComponent(JSON.stringify(variables))}`;
 
@@ -101,18 +120,21 @@ async function executeQuery(author, afterID) {
   return data;
 }
 
-// 情報抽出関数
 function parseInfo(node, checkJP = false) {
   if (!node) return null;
   const articles = [];
 
   const addArticle = obj => {
+    const names = obj.attributions.map(attr =>
+      attr.user.name.toLowerCase()
+    );
     if (obj?.wikidotInfo) {
       articles.push({
         url: obj.url,
         title: obj.wikidotInfo.title,
         rating: obj.wikidotInfo.rating,
         createdAt: new Date(obj.wikidotInfo.createdAt),
+        name: names,
         branch: null
       });
     }
@@ -149,6 +171,11 @@ function parseInfo(node, checkJP = false) {
     article.createdAt < earliest.createdAt ? article : earliest, articles[0]
   );
 
+  const author = targetAuthor.toLowerCase();
+  if (!oriArticle.name.includes(author)) {
+    return null;
+  }
+
   for (const {pattern, branch} of wikiRegexes) {
     if (pattern.test(oriArticle.url)) {
       oriArticle.branch = branch;
@@ -162,7 +189,6 @@ function parseInfo(node, checkJP = false) {
 const getOriInfo = (node) => parseInfo(node);
 const getJPinfo = (node) => parseInfo(node, true);
 
-// HTMLを生成する関数
 const formatDate = (date) =>
   `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`;
 
@@ -192,17 +218,14 @@ function buildPageHtml(node) {
   `;
 }
 
-// レスポンスからページ情報をレンタリングする関数
 function renderPages(pages) {
   const resultContainer = document.getElementById("result");
 
-  // 初回検索時に検索結果が0件の場合
   if (!pages.length) {
     resultContainer.innerHTML = "<p>Wikidot IDが間違っています。</p>";
     return;
   }
 
-  // 日付ソート・重複削除
   const processedUrls = new Set();
   const sortedPages = pages
     .map(page => {
@@ -222,17 +245,11 @@ function renderPages(pages) {
   resultContainer.innerHTML = pagesHTML;
 }
 
-// ローディングアニメーションを管理する関数
-function showLoading(show) {
-  const loadingElement = document.getElementById("loading");
-  loadingElement.style.display = show ? "block" : "none";
-}
-
-// 検索結果の取得とレンダリングを行う関数
 async function searchArticle(author) {
   let afterID = null;
   const allPages = [];
-  showLoading(true);
+  const loadingElement = document.getElementById("loading");
+  loadingElement.style.display = "block";
 
   try {
     do {
@@ -250,7 +267,7 @@ async function searchArticle(author) {
     console.error("検索に失敗しました", error);
     document.getElementById("result").innerHTML = "<p>エラーが発生しました。再度お試しください。</p>";
   } finally {
-    showLoading(false);
+    loadingElement.style.display = "none";
   }
 }
 
@@ -269,6 +286,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     resultContainer.innerHTML = "";
+    targetAuthor = author;
     searchArticle(author);
   });
 
