@@ -73,8 +73,6 @@ const CROM_QUERY =`
   }
 `;
 
-let targetAuthor = "";
-
 const WIKI_REGEXES = [
   { pattern: /^http:\/\/scp-wiki\./, branch: "EN"},
   { pattern: /^http:\/\/wanderers-library\./, branch: "WL"},
@@ -156,7 +154,7 @@ const collectArticles = (node) => {
 };
 
 // nodeから原語版もしくはJP版の情報を返す
-function parseInfo(node, checkJP = false) {
+function parseInfo(node, targetAuthor = '', checkJP = false) {
   const articles = collectArticles(node);
   if (!articles.length) return null;
 
@@ -178,8 +176,7 @@ function parseInfo(node, checkJP = false) {
     if (/\.wikidot\.com\/scp-\d{3,4}$/.test(oriArticle.url)) {
       oriArticle = articles.find(article => article.url.indexOf("http://scp-wiki.") === 0);
     } else {
-      const author = targetAuthor;
-      if (!oriArticle.name.includes(author)) return null;
+      if (!oriArticle.name.includes(targetAuthor)) return null;
     }
     
     const matched = WIKI_REGEXES.find(({ pattern, branch }) => pattern.test(oriArticle.url));
@@ -192,14 +189,14 @@ function parseInfo(node, checkJP = false) {
   return null;
 }
 
-const getOriInfo = (node) => parseInfo(node);
-const getJPinfo = (node) => parseInfo(node, true);
+const getOriInfo = (node, targetAuthor) => parseInfo(node, targetAuthor);
+const getJPinfo = (node) => parseInfo(node, '', true);
 
 const formatDate = (date) =>
   `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`;
 
-function buildPageHtml(node) {
-  const oriInfo = getOriInfo(node);
+function buildPageHtml(node, targetAuthor) {
+  const oriInfo = getOriInfo(node, targetAuthor);
   const jpInfo = getJPinfo(node);
 
   if (!oriInfo) return "";
@@ -230,7 +227,7 @@ function buildPageHtml(node) {
   `;
 }
 
-function renderPages(pages) {
+function renderPages(pages, targetAuthor) {
   const resultContainer = document.getElementById("result");
 
   if (!pages.length) {
@@ -241,7 +238,7 @@ function renderPages(pages) {
   const processedUrls = new Set();
   const sortedPages = pages
     .map(page => {
-      const oriInfo = getOriInfo(page.node);
+      const oriInfo = getOriInfo(page.node, targetAuthor);
       return { ...page, oriInfo};
     })
     .filter(({ oriInfo }) => {
@@ -253,7 +250,7 @@ function renderPages(pages) {
       return b.oriInfo.createdAt - a.oriInfo.createdAt;
     });
 
-  const pagesHTML = sortedPages.map(({ node }) => buildPageHtml(node)).join("");
+  const pagesHTML = sortedPages.map(({ node }) => buildPageHtml(node, targetAuthor)).join("");
   resultContainer.innerHTML = pagesHTML;
 }
 
@@ -273,7 +270,8 @@ async function searchArticle(author) {
       afterID = hasNextPage ? response.user.attributedPages.pageInfo.endCursor : null;
       if (afterID) await new Promise(resolve => setTimeout(resolve, 500));
     } while(afterID);
-    renderPages(allPages);
+    const targetAuthor = author.toLowerCase();
+    renderPages(allPages, targetAuthor);
   } catch (error) {
     console.error("検索に失敗しました", error);
     document.getElementById("result").innerHTML = "<p>エラーが発生しました。再度お試しください。</p>";
@@ -297,7 +295,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     resultContainer.innerHTML = "";
-    targetAuthor = author.toLowerCase();
     searchArticle(author);
   });
 
