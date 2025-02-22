@@ -3,11 +3,11 @@ const query =`
   query enWorksQuery($author: String!, $afterID: ID) {
     user(name: $author) {
       attributedPages(
-        sort: { 
+        sort: {
           key: CREATED_AT
           order: DESC
         }
-        filter: { wikidotInfo: { category: { eq: "_default" } } }, 
+        filter: { wikidotInfo: { category: { eq: "_default" } } },
         first: 50
         after: $afterID
       ) {
@@ -27,6 +27,12 @@ const query =`
                 createdAt
               }
             }
+            translationOf {
+              url
+              translations {
+                url
+              }
+            }
           }
         }
         pageInfo {
@@ -38,15 +44,11 @@ const query =`
   }
 `;
 
-let targetAuthor = "";
-let allPages = [];
-
 // GraphQL API呼び出し用の関数
 const buildCromApiUrl = (query, variables) =>
   `https://api.crom.avn.sh/graphql?query=${encodeURIComponent(query)}&variables=${encodeURIComponent(JSON.stringify(variables))}`;
 
-async function executeQuery(afterID) {
-  const author = targetAuthor;
+async function executeQuery(author, afterID) {
   const variables = { author, afterID }
   const requestUrl = buildCromApiUrl(query, variables);
 
@@ -68,12 +70,19 @@ async function executeQuery(afterID) {
 
 // 共通の情報抽出関数
 function extractInfo(node, pattern, checkMainUrl = false) {
+  let original = null;
+  let translations = [];
+
+  function url(obj) {
+    return obj.url;
+  }
   const selectInfo = (obj) => ({
     url: obj.url,
     title: obj.wikidotInfo.title,
     rating: obj.wikidotInfo.rating,
     createdAt: new Date(obj.wikidotInfo.createdAt)
   });
+
 
   if (checkMainUrl && pattern.test(node.url)) {
     return selectInfo(node);
@@ -86,21 +95,21 @@ function extractInfo(node, pattern, checkMainUrl = false) {
   return null;
 }
 
-const getENinfo = (node) => extractInfo(node, /^http:\/\/scp-wiki\..*/, true);
+const getOriginalInfo = (node) => extractInfo(node, /^http:\/\/scp-wiki\..*/, true);
 const getJPinfo = (node) => extractInfo(node, /^http:\/\/scp-jp\..*/);
 
 // HTMLを生成する関数
 const formatDate = (date) =>
   `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`;
 
-function buildPageHhml(node) {
-  const enInfo = getENinfo(node);
+function buildPageHtml(node) {
+  const originalInfo = getOriginalInfo(node);
   const jpInfo = getJPinfo(node);
 
   if(!jpInfo) {
     return `
       <div class="untransPage">
-        <p><strong></strong><a href="${enInfo.url}" target="_blank">${enInfo.title}</a><span class="postDate"> ${formatDate(enInfo.createdAt)}投稿</span></p>
+        <p><strong></strong><a href="${originalInfo.url}" target="_blank">${originalInfo.title}</a><span class="postDate"> ${formatDate(originalInfo.createdAt)}投稿</span></p>
       </div>
     `;
   }
@@ -109,11 +118,11 @@ function buildPageHhml(node) {
     <div class="page">
       <p><a href="${jpInfo.url}" target="_blank">${jpInfo.title}</a></p>
       <p class="details">
-        <strong>原語版:</strong> 
-        <a href="${enInfo.url}" target="_blank">${enInfo.title}</a><span class="postDate"> ${formatDate(jpInfo.createdAt)}翻訳 ${formatDate(enInfo.createdAt)}投稿</span>
+        <strong>原語版:</strong>
+        <a href="${originalInfo.url}" target="_blank">${originalInfo.title}</a><span class="postDate"> ${formatDate(jpInfo.createdAt)}翻訳 ${formatDate(originalInfo.createdAt)}投稿</span>
       </p>
       <p class="details">
-        <strong>EN:</strong> ${enInfo.rating} / <strong>JP:</strong> ${jpInfo.rating}
+        <strong>EN:</strong> ${originalInfo.rating} / <strong>JP:</strong> ${jpInfo.rating}
       </p>
     </div>
   `;
@@ -122,7 +131,7 @@ function buildPageHhml(node) {
 // レスポンスからページ情報をレンタリングする関数
 function renderPages(pages) {
   const resultContainer = document.getElementById("result");
-  
+
   // 初回検索時に検索結果が0件の場合
   if (!pages.length) {
     resultContainer.innerHTML = "<p>Wikidot IDが間違っています。</p>";
@@ -133,19 +142,19 @@ function renderPages(pages) {
   const processedUrls = new Set();
   const sortedPages = pages
     .map(page => {
-      const enInfo = getENinfo(page.node);
-      return { ...page, enInfo};
+      const originalInfo = getOriginalInfo(page.node);
+      return { ...page, originalInfo};
     })
-    .filter(({ enInfo }) => {
-      if (!enInfo || processedUrls.has(enInfo.url)) return false;
-      processedUrls.add(enInfo.url);
+    .filter(({ originalInfo }) => {
+      if (!originalInfo || processedUrls.has(originalInfo.url)) return false;
+      processedUrls.add(originalInfo.url);
       return true;
     })
     .sort((a, b) => {
-      return b.enInfo.createdAt - a.enInfo.createdAt;
+      return b.originalInfo.createdAt - a.originalInfo.createdAt;
     });
-  
-  const pagesHTML = sortedPages.map(({ node }) => buildPageHhml(node)).join("");
+
+  const pagesHTML = sortedPages.map(({ node }) => buildPageHtml(node)).join("");
   resultContainer.innerHTML = pagesHTML;
 }
 
@@ -156,28 +165,29 @@ function showLoading(show) {
 }
 
 // 検索結果の取得とレンダリングを行う関数
-async function searchArticle(afterID = null) {
-  try {
-    const response = await executeQuery(afterID);
-    const pages = response.user.attributedPages.edges;
-    const hasNextPage = response.user.attributedPages.pageInfo.hasNextPage;
-    afterID = response.user.attributedPages.pageInfo.endCursor;
-    allPages = [...allPages, ...pages];
+async function searchArticle(author) {
+  let afterID = null;
+  const allPages = [];
+  showLoading(true);
 
-    // まだ記事がある場合は更に検索する
-    if (hasNextPage) {
-      setTimeout(() => {
-        searchArticle(afterID);
-      }, 500);
-    } else {
-      renderPages(allPages);
-      showLoading(false);
-    }
+  try {
+    do {
+      const response = await executeQuery(author, afterID);
+      const pages = response.user.attributedPages.edges;
+      const hasNextPage = response.user.attributedPages.pageInfo.hasNextPage;
+
+      allPages.push(...pages);
+      afterID = hasNextPage ? response.user.attributedPages.pageInfo.endCursor : null;
+      if (afterID) await new Promise(resolve => setTimeout(resolve, 500));
+    } while(afterID);
+
+    renderPages(allPages);
   } catch (error) {
     console.error("検索に失敗しました", error);
     document.getElementById("result").innerHTML = "<p>エラーが発生しました。再度お試しください。</p>";
+  } finally {
     showLoading(false);
-  } 
+  }
 }
 
 // DOM読み込み後の初期設定
@@ -195,10 +205,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     resultContainer.innerHTML = "";
-    targetAuthor = author;
-    allPages = [];
-    showLoading(true);
-    searchArticle();
+    searchArticle(author);
   });
 
   authorInput.addEventListener("keypress", (event) => {
