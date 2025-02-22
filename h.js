@@ -1,81 +1,35 @@
+以下のコードをリファクタリングし、より実行速度が早くメンテナンスがしやすい効率的なコードにしてください。改善箇所のみをコードブロックで出力してください。
+
+```js
 // 検索クエリ
 const query =`
   query enWorksQuery($author: String!, $afterID: ID) {
-    user(name: $author) {
-      attributedPages(
-        sort: {
-          key: CREATED_AT
-          order: DESC
-        }
-        filter: { wikidotInfo: { category: { eq: "_default" } } },
-        first: 50
-        after: $afterID
-      ) {
-        edges {
-          node {
-            url
-            wikidotInfo {
-              title
-              rating
-              createdAt
-            }
-            translations {
-              url
-              wikidotInfo {
-                title
-                rating
-                createdAt
-              }
-            }
-            translationOf {
-              url
-              wikidotInfo {
-                title
-                rating
-                createdAt
-              }
-              translations {
-                url
-                wikidotInfo {
-                  title
-                  rating
-                  createdAt
-                }
-              }
-            }
-          }
-        }
-        pageInfo {
-          hasNextPage
-          endCursor
-        }
-      }
-    }
+    ...
   }
 `;
 
 // WikiURL辞書
-const wikiRegexes = [
-  { pattern: /^http:\/\/scp-wiki\./, branch: "EN"},
-  { pattern: /^http:\/\/wanderers-library\./, branch: "WL"},
-  { pattern: /^http:\/\/scp-jp\./, branch: "JP"},
-  { pattern: /^http:\/\/scp-wiki-cn\./, branch: "CN"},
-  { pattern: /^http:\/\/lafundacionscp\./, branch: "ES"},
-  { pattern: /^http:\/\/scpko\./, branch: "KO"},
-  { pattern: /^http:\/\/scp-pl\./, branch: "PL"},
-  { pattern: /^http:\/\/scpfoundation\./, branch: "RU"},
-  { pattern: /^http:\/\/scp-zh-tr\./, branch: "ZH"},
-  { pattern: /^http:\/\/scp-pt-br\./, branch: "PT"},
-  { pattern: /^http:\/\/fondationscp\./, branch: "FR"},
-  { pattern: /^http:\/\/fondazionescp\./, branch: "IT"},
-  { pattern: /^http:\/\/scp-th\./, branch: "TH"},
-  { pattern: /^http:\/\/scp-cs\./, branch: "CS"},
-  { pattern: /^http:\/\/scp-wiki-de\./, branch: "DE"},
-  { pattern: /^http:\/\/scp-vn\./, branch: "VN"},
-  { pattern: /^http:\/\/scp-ukrainian\./, branch: "UR"},
-  { pattern: /^http:\/\/scp-idn\./, branch: "ID"},
-  { pattern: /^http:\/\/scp-int\./, branch: "INT"},
-];
+const wikiDict = new Map([
+  ["^http:\/\/scp-wiki\\.", "EN"],
+  ["^http:\/\/wanderers-library\\.", "WL"],
+  ["^http:\/\/scp-jp\\.", "JP"],
+  ["^http:\/\/scp-wiki-cn\\.", "CN"],
+  ["^http:\/\/lafundacionscp\\.", "ES"],
+  ["^http:\/\/scpko\\.", "KO"],
+  ["^http:\/\/scp-pl\\.", "PL"],
+  ["^http:\/\/scpfoundation\\.", "RU"],
+  ["^http:\/\/scp-zh-tr\\.", "ZH"],
+  ["^http:\/\/scp-pt-br\\.", "PT"],
+  ["^http:\/\/fondationscp\\.", "FR"],
+  ["^http:\/\/fondazionescp\\.", "IT"],
+  ["^http:\/\/scp-th\\.", "TH"],
+  ["^http:\/\/scp-cs\\.", "CS"],
+  ["^http:\/\/scp-wiki-de\\.", "DE"],
+  ["^http:\/\/scp-vn\\.", "VN"],
+  ["^http:\/\/scp-ukrainian\\.", "UR"],
+  ["^http:\/\/scp-idn\\.", "ID"],
+  ["^http:\/\/scp-int\\.", "INT"],
+]);
 
 // GraphQL API呼び出し用の関数
 const buildCromApiUrl = (query, variables) =>
@@ -103,29 +57,32 @@ async function executeQuery(author, afterID) {
 
 // 情報抽出関数
 function parseInfo(node, checkJP = false) {
-  if (!node) return null;
   const articles = [];
 
-  const addArticle = obj => {
-    if (obj?.wikidotInfo) {
-      articles.push({
-        url: obj.url,
-        title: obj.wikidotInfo.title,
-        rating: obj.wikidotInfo.rating,
-        createdAt: new Date(obj.wikidotInfo.createdAt),
-        branch: null
-      });
-    }
-  };
+  const selectInfo = (obj) => ({
+    url: obj.url,
+    title: obj.wikidotInfo.title,
+    rating: obj.wikidotInfo.rating,
+    createdAt: new Date(obj.wikidotInfo.createdAt),
+    branch: null
+  });
 
-  addArticle(node);
-  if (Array.isArray(node.translations)) {
-    node.translations.forEach(addArticle);
+  function addArticle(obj) {
+    if (obj && obj.wikidotInfo) {
+      articles.push(selectInfo(obj));
+    }
   }
-  if (node.translationOf) {
-    addArticle(node.translationOf);
-    if (Array.isArray(node.translationOf.translations)) {
-      node.translationOf.translations.forEach(addArticle);
+
+  if (node) {
+    addArticle(node);
+    if (Array.isArray(node.translations)) {
+      node.translations.forEach(addArticle);
+    }
+    if (node.translationOf) {
+      addArticle(node.translationOf);
+      if (Array.isArray(node.translationOf.translations)) {
+        node.translationOf.translations.forEach(addArticle);
+      }
     }
   }
 
@@ -149,9 +106,12 @@ function parseInfo(node, checkJP = false) {
     article.createdAt < earliest.createdAt ? article : earliest, articles[0]
   );
 
-  for (const {pattern, branch} of wikiRegexes) {
-    if (pattern.test(oriArticle.url)) {
+  console.log(oriArticle.url);
+  for (const [pattern, branch] of wikiDict.entries()) {
+    const regex = new RegExp(pattern);
+    if (regex.test(oriArticle.url)) {
       oriArticle.branch = branch;
+      console.log(oriArticle.branch);
       return oriArticle.branch === "JP" ? null : oriArticle;
     }
   }
@@ -278,3 +238,4 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 });
+```
