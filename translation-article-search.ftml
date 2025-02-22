@@ -204,8 +204,7 @@ SOFTWARE.
   </div>
 
   <script>
-    // 検索クエリ
-    const query =`
+    const CROM_QUERY =`
       query enWorksQuery($author: String!, $afterID: ID) {
         user(name: $author) {
           attributedPages(
@@ -220,6 +219,11 @@ SOFTWARE.
             edges {
               node {
                 url
+                attributions {
+                  user {
+                    name
+                  }
+                }
                 wikidotInfo {
                   title
                   rating
@@ -227,6 +231,11 @@ SOFTWARE.
                 }
                 translations {
                   url
+                  attributions {
+                    user {
+                      name
+                    }
+                  }
                   wikidotInfo {
                     title
                     rating
@@ -235,6 +244,11 @@ SOFTWARE.
                 }
                 translationOf {
                   url
+                  attributions {
+                    user {
+                      name
+                    }
+                  }
                   wikidotInfo {
                     title
                     rating
@@ -242,6 +256,11 @@ SOFTWARE.
                   }
                   translations {
                     url
+                    attributions {
+                      user {
+                        name
+                      }
+                    }
                     wikidotInfo {
                       title
                       rating
@@ -260,8 +279,7 @@ SOFTWARE.
       }
     `;
 
-    // WikiURL辞書
-    const wikiRegexes = [
+    const WIKI_REGEXES = [
       { pattern: /^http:\/\/scp-wiki\./, branch: "EN"},
       { pattern: /^http:\/\/wanderers-library\./, branch: "WL"},
       { pattern: /^http:\/\/scp-jp\./, branch: "JP"},
@@ -272,24 +290,26 @@ SOFTWARE.
       { pattern: /^http:\/\/scpfoundation\./, branch: "RU"},
       { pattern: /^http:\/\/scp-zh-tr\./, branch: "ZH"},
       { pattern: /^http:\/\/scp-pt-br\./, branch: "PT"},
+      { pattern: /^http:\/\/scp-wiki-de\./, branch: "DE"},
+      { pattern: /^http:\/\/scp-int\./, branch: "INT"},
       { pattern: /^http:\/\/fondationscp\./, branch: "FR"},
       { pattern: /^http:\/\/fondazionescp\./, branch: "IT"},
       { pattern: /^http:\/\/scp-th\./, branch: "TH"},
       { pattern: /^http:\/\/scp-cs\./, branch: "CS"},
-      { pattern: /^http:\/\/scp-wiki-de\./, branch: "DE"},
       { pattern: /^http:\/\/scp-vn\./, branch: "VN"},
       { pattern: /^http:\/\/scp-ukrainian\./, branch: "UR"},
       { pattern: /^http:\/\/scp-idn\./, branch: "ID"},
-      { pattern: /^http:\/\/scp-int\./, branch: "INT"},
+      { pattern: /^http:\/\/scp-el\./, branch: "EL"},
+      { pattern: /^http:\/\/scp-nd\./, branch: "ND"},
+      { pattern: /^http:\/\/scpvakfi\./, branch: "TR"},
     ];
 
-    // GraphQL API呼び出し用の関数
-    const buildCromApiUrl = (query, variables) =>
-      `https://api.crom.avn.sh/graphql?query=${encodeURIComponent(query)}&variables=${encodeURIComponent(JSON.stringify(variables))}`;
+    const buildCromApiUrl = (variables) =>
+      `https://api.crom.avn.sh/graphql?query=${encodeURIComponent(CROM_QUERY)}&variables=${encodeURIComponent(JSON.stringify(variables))}`;
 
     async function executeQuery(author, afterID) {
       const variables = { author, afterID }
-      const requestUrl = buildCromApiUrl(query, variables);
+      const requestUrl = buildCromApiUrl(variables);
 
       const response = await fetch(requestUrl, {
         method: "GET",
@@ -307,24 +327,25 @@ SOFTWARE.
       return data;
     }
 
-    // 情報抽出関数
-    function parseInfo(node, checkJP = false) {
+    // nodeから各種情報を抽出
+    const collectArticles = (node) => {
       if (!node) return null;
       const articles = [];
 
       const addArticle = obj => {
-        if (obj?.wikidotInfo) {
-          articles.push({
-            url: obj.url,
-            title: obj.wikidotInfo.title,
-            rating: obj.wikidotInfo.rating,
-            createdAt: new Date(obj.wikidotInfo.createdAt),
-            branch: null
-          });
-        }
+        if (!obj?.wikidotInfo) return;
+        articles.push({
+          url: obj.url,
+          title: obj.wikidotInfo.title,
+          rating: obj.wikidotInfo.rating,
+          createdAt: new Date(obj.wikidotInfo.createdAt),
+          name: obj.attributions.map(attr => attr.user.name.toLowerCase()),
+          branch: null
+        });
       };
 
       addArticle(node);
+
       if (Array.isArray(node.translations)) {
         node.translations.forEach(addArticle);
       }
@@ -335,7 +356,13 @@ SOFTWARE.
         }
       }
 
-      if (articles.length === 0) return null;
+      return articles;
+    };
+
+    // nodeから原語版もしくはJP版の情報を返す
+    function parseInfo(node, targetAuthor = '', checkJP = false) {
+      const articles = collectArticles(node);
+      if (!articles.length) return null;
 
       if (checkJP) {
         const jpArticle = articles.find(article => article.url.indexOf("http://scp-jp.") === 0);
@@ -346,40 +373,47 @@ SOFTWARE.
         } else if (wljpArticle) {
           wljpArticle.branch = "WL-JP";
           return wljpArticle;
-        } else {
-          return null;
         }
-      }
+      } else {
+        let oriArticle = articles.reduce((earliest, article) => 
+          article.createdAt < earliest.createdAt ? article : earliest, articles[0]
+        );
 
-      const oriArticle = articles.reduce((earliest, article) => 
-        article.createdAt < earliest.createdAt ? article : earliest, articles[0]
-      );
-
-      for (const {pattern, branch} of wikiRegexes) {
-        if (pattern.test(oriArticle.url)) {
-          oriArticle.branch = branch;
-          return oriArticle.branch === "JP" ? null : oriArticle;
+        if (/\.wikidot\.com\/scp-\d{3,4}$/.test(oriArticle.url)) {
+          oriArticle = articles.find(article => article.url.indexOf("http://scp-wiki.") === 0);
+        } else {
+          if (!oriArticle.name.includes(targetAuthor)) return null;
+        }
+        
+        const matched = WIKI_REGEXES.find(({ pattern, branch }) => pattern.test(oriArticle.url));
+        if (matched) {
+          oriArticle.branch = matched.branch;
+          return matched.branch === "JP" ? null : oriArticle;
         }
       }
 
       return null;
     }
 
-    const getOriInfo = (node) => parseInfo(node);
-    const getJPinfo = (node) => parseInfo(node, true);
+    const getOriInfo = (node, targetAuthor) => parseInfo(node, targetAuthor);
+    const getJPinfo = (node) => parseInfo(node, '', true);
 
-    // HTMLを生成する関数
     const formatDate = (date) =>
       `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getDate()).padStart(2, '0')}`;
 
-    function buildPageHtml(node) {
-      const oriInfo = getOriInfo(node);
+    function buildPageHtml(node, targetAuthor) {
+      const oriInfo = getOriInfo(node, targetAuthor);
       const jpInfo = getJPinfo(node);
+
+      if (!oriInfo) return "";
 
       if(!jpInfo) {
         return `
           <div class="untransPage">
-            <p><strong>${oriInfo.branch}:</strong> <a href="${oriInfo.url}" target="_blank">${oriInfo.title}</a><span class="postDate"> ${formatDate(oriInfo.createdAt)}投稿</span></p>
+            <p>
+              <strong>${oriInfo.branch}:</strong> <a href="${oriInfo.url}" target="_blank">${oriInfo.title}</a>
+              <span class="postDate"> ${formatDate(oriInfo.createdAt)}投稿</span>
+            </p>
           </div>
         `;
       }
@@ -389,7 +423,8 @@ SOFTWARE.
           <p><a href="${jpInfo.url}" target="_blank">${jpInfo.title}</a></p>
           <p class="details">
             <strong>原語版:</strong>
-            <a href="${oriInfo.url}" target="_blank">${oriInfo.title}</a><span class="postDate"> ${formatDate(jpInfo.createdAt)}翻訳 ${formatDate(oriInfo.createdAt)}投稿</span>
+            <a href="${oriInfo.url}" target="_blank">${oriInfo.title}</a>
+            <span class="postDate"> ${formatDate(jpInfo.createdAt)}翻訳 ${formatDate(oriInfo.createdAt)}投稿</span>
           </p>
           <p class="details">
             <strong>${oriInfo.branch}:</strong> ${oriInfo.rating} / <strong>${jpInfo.branch}:</strong> ${jpInfo.rating}
@@ -398,21 +433,18 @@ SOFTWARE.
       `;
     }
 
-    // レスポンスからページ情報をレンタリングする関数
-    function renderPages(pages) {
+    function renderPages(pages, targetAuthor) {
       const resultContainer = document.getElementById("result");
 
-      // 初回検索時に検索結果が0件の場合
       if (!pages.length) {
         resultContainer.innerHTML = "<p>Wikidot IDが間違っています。</p>";
         return;
       }
 
-      // 日付ソート・重複削除
       const processedUrls = new Set();
       const sortedPages = pages
         .map(page => {
-          const oriInfo = getOriInfo(page.node);
+          const oriInfo = getOriInfo(page.node, targetAuthor);
           return { ...page, oriInfo};
         })
         .filter(({ oriInfo }) => {
@@ -424,21 +456,15 @@ SOFTWARE.
           return b.oriInfo.createdAt - a.oriInfo.createdAt;
         });
 
-      const pagesHTML = sortedPages.map(({ node }) => buildPageHtml(node)).join("");
+      const pagesHTML = sortedPages.map(({ node }) => buildPageHtml(node, targetAuthor)).join("");
       resultContainer.innerHTML = pagesHTML;
     }
 
-    // ローディングアニメーションを管理する関数
-    function showLoading(show) {
-      const loadingElement = document.getElementById("loading");
-      loadingElement.style.display = show ? "block" : "none";
-    }
-
-    // 検索結果の取得とレンダリングを行う関数
     async function searchArticle(author) {
       let afterID = null;
       const allPages = [];
-      showLoading(true);
+      const loadingElement = document.getElementById("loading");
+      loadingElement.style.display = "block";
 
       try {
         do {
@@ -450,13 +476,13 @@ SOFTWARE.
           afterID = hasNextPage ? response.user.attributedPages.pageInfo.endCursor : null;
           if (afterID) await new Promise(resolve => setTimeout(resolve, 500));
         } while(afterID);
-
-        renderPages(allPages);
+        const targetAuthor = author.toLowerCase();
+        renderPages(allPages, targetAuthor);
       } catch (error) {
         console.error("検索に失敗しました", error);
         document.getElementById("result").innerHTML = "<p>エラーが発生しました。再度お試しください。</p>";
       } finally {
-        showLoading(false);
+        loadingElement.style.display = "none";
       }
     }
 
@@ -496,20 +522,24 @@ SOFTWARE.
 
 + 翻訳記事検索
 
-[[[*https://crom.avn.sh|Crom API]]]のデータからEN著者のJP翻訳記事を検索します。ごく稀にCrom APIのデータが誤っているため、既訳記事が未訳扱いされることがあります。
+[[[*https://crom.avn.sh|Crom API]]]のデータから特定の著者のJP翻訳記事を検索します。ごく稀にCrom APIのデータが誤っているため、ごく一部の記事が表示されません。
 
 + 使い方
 
-Wikidot IDを入力して検索ボタンを押すと、数秒後にその著者の記事一覧が出力されます。既訳記事は、翻訳記事のURL・原語版のURL・ENとJPの評価値・ENとJPの投稿日(翻訳記事投稿日)が出力されます。未訳記事は、原語版のURL・原語版の投稿日が出力されます。
+Wikidot IDを入力して検索ボタンを押すと、数秒後にその著者の記事一覧が出力されます。既訳記事は、翻訳記事のURL・原語版のURL・各評価値・各投稿日(翻訳投稿日)が出力されます。未訳記事は、原語版のURL・原語版の投稿日が出力されます。
 
 + その他
 
-複数回「エラーが発生しました」と出る場合は、検索したWikidot IDとともにこのページのディスカッションにお願いします。
+* SCP各言語版・WL-EN/JPに対応しています。
+* 複数回「エラーが発生しました」と出る場合は、検索したWikidot IDとともにこのページのディスカッションにお願いします。
 
 ++* Change Log
 [[div class="code"]]
 Created by sendoh-oroka 2025
 MIT License: https://github.com/sendoh-oroka/translationArticleSearch/blob/main/LICENSE
+
+[1.1.1] - 2025-02-22
+- 全言語版Wikiに対応
 
 [1.0.0] - 2025-02-21
 - Initial-release
